@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Zap, Layout, FileText, Mic, Sparkles, CheckCircle2, Loader2, AlertCircle, ArrowDown } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Zap, Layout, FileText, Mic, Sparkles, CheckCircle2, Loader2, AlertCircle, ArrowDown, Clock, User } from 'lucide-react';
 import { DocumentInput } from './components/DocumentInput';
 import { AnalysisView } from './components/AnalysisView';
 import { LiveSession } from './components/LiveSession';
+import { HistoryPanel } from './components/HistoryPanel';
 import { analyzeDocument } from './services/gemini';
 import { DocumentInput as DocInputType, AnalysisResult, AppMode, AgentStage } from './types';
 
@@ -13,6 +14,28 @@ function App() {
   const [agentStage, setAgentStage] = useState<AgentStage>('idle');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [showLiveModal, setShowLiveModal] = useState(false);
+  
+  // History State
+  const [history, setHistory] = useState<AnalysisResult[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Load History from LocalStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('bizflow_history');
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load history", e);
+      }
+    }
+  }, []);
+
+  const saveToHistory = (newResult: AnalysisResult) => {
+    const newHistory = [newResult, ...history].slice(0, 10); // Keep last 10
+    setHistory(newHistory);
+    localStorage.setItem('bizflow_history', JSON.stringify(newHistory));
+  };
 
   const handleAnalyze = async () => {
     if (!input) return;
@@ -28,6 +51,7 @@ function App() {
       
       const data = await analyzeDocument(payload, (stage) => setAgentStage(stage));
       setResult(data);
+      saveToHistory(data);
     } catch (error) {
       console.error("Analysis failed:", error);
       alert("Failed to analyze document. Please check your API key and try again.");
@@ -93,7 +117,7 @@ function App() {
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => { setResult(null); setInput(null); }}>
               <div className="bg-gradient-to-br from-blue-600 to-cyan-600 p-2 rounded-lg shadow-lg shadow-blue-500/20">
                 <Zap className="text-white h-5 w-5" fill="currentColor" />
               </div>
@@ -103,9 +127,22 @@ function App() {
             </div>
             
             <div className="flex items-center space-x-4">
+               {/* History Button */}
+               <button 
+                  onClick={() => setShowHistory(true)}
+                  className="p-2 text-slate-400 hover:text-white transition-colors relative"
+                  title="Analysis History"
+               >
+                  <Clock size={20} />
+                  {history.length > 0 && (
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full border border-slate-900"></span>
+                  )}
+               </button>
+
+               {/* Live Assistant */}
                <button 
                   onClick={() => setShowLiveModal(true)}
-                  className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-full border border-slate-700 transition-all hover:border-blue-500/50 group"
+                  className="hidden md:flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-full border border-slate-700 transition-all hover:border-blue-500/50 group"
                >
                   <div className="relative flex items-center justify-center">
                      <Mic size={18} className="text-blue-400 group-hover:text-blue-300 transition-colors" />
@@ -113,6 +150,11 @@ function App() {
                   </div>
                   <span className="text-sm font-medium">Live Assistant</span>
                </button>
+               
+               {/* Mock Profile */}
+               <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white border border-slate-600 cursor-pointer hover:bg-slate-600">
+                  <User size={16} />
+               </div>
             </div>
           </div>
         </div>
@@ -126,7 +168,7 @@ function App() {
             <div className="lg:col-span-4 space-y-6">
                 
                 {/* Input Card */}
-                <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden">
+                <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden sticky top-24 z-20">
                     <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between">
                         <h2 className="font-semibold text-white flex items-center text-sm uppercase tracking-wider">
                             <Layout className="mr-2 text-blue-500" size={16} />
@@ -194,7 +236,7 @@ function App() {
                 {result ? (
                     <AnalysisView result={result} />
                 ) : (
-                    <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-800 text-slate-500 p-8 text-center">
+                    <div className="h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-900/50 rounded-xl border-2 border-dashed border-slate-800 text-slate-500 p-8 text-center animate-in fade-in duration-700">
                         <div className="bg-slate-800 p-6 rounded-full mb-6 ring-1 ring-slate-700">
                             <FileText size={48} className="text-slate-600" />
                         </div>
@@ -213,6 +255,14 @@ function App() {
       {showLiveModal && (
         <LiveSession onClose={() => setShowLiveModal(false)} />
       )}
+
+      {/* History Panel */}
+      <HistoryPanel 
+        history={history}
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onSelect={(item) => { setResult(item); setAgentStage('complete'); }}
+      />
     </div>
   );
 }

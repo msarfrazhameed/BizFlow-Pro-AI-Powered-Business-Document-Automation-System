@@ -50,6 +50,28 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
     return btoa(binary);
   };
 
+  // Helper: Downsample buffer (e.g. 48000 -> 16000)
+  const downsample = (buffer: Float32Array, inputRate: number, outputRate: number) => {
+    if (inputRate === outputRate) return buffer;
+    const ratio = inputRate / outputRate;
+    const newLength = Math.round(buffer.length / ratio);
+    const result = new Float32Array(newLength);
+    
+    for (let i = 0; i < newLength; i++) {
+        const index = i * ratio;
+        const floor = Math.floor(index);
+        const ceil = Math.ceil(index);
+        const t = index - floor;
+        
+        // Simple linear interpolation
+        const v0 = buffer[floor] || 0;
+        const v1 = buffer[ceil] || buffer[floor] || 0; // Handle end of buffer
+        
+        result[i] = v0 + (v1 - v0) * t;
+    }
+    return result;
+  };
+
   // Helper: Create Blob from Float32Array
   const createBlob = (data: Float32Array) => {
     const l = data.length;
@@ -73,6 +95,9 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
   ): Promise<AudioBuffer> => {
     const dataInt16 = new Int16Array(data.buffer);
     const frameCount = dataInt16.length / numChannels;
+    
+    // Create a buffer with the explicit sample rate (24000)
+    // The browser will handle playback on the system context (e.g. 48000) automatically
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 
     for (let channel = 0; channel < numChannels; channel++) {
@@ -91,9 +116,9 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      // Setup Audio Contexts
-      const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-      const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      // Use default sample rates (likely 44100 or 48000) to avoid NotSupportedError
+      const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       
       inputContextRef.current = inputCtx;
       audioContextRef.current = outputCtx;
@@ -130,9 +155,12 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
               let sum = 0;
               for(let i=0; i<inputData.length; i++) sum += inputData[i] * inputData[i];
               const rms = Math.sqrt(sum / inputData.length);
-              setVolume(Math.min(1, rms * 5)); // Boost a bit for visual
+              setVolume(Math.min(1, rms * 5)); 
 
-              const pcmBlob = createBlob(inputData);
+              // Downsample to 16000Hz before sending
+              const downsampledData = downsample(inputData, inputCtx.sampleRate, 16000);
+              const pcmBlob = createBlob(downsampledData);
+              
               if (sessionPromiseRef.current) {
                 sessionPromiseRef.current.then((session) => {
                   session.sendRealtimeInput({ media: pcmBlob });
@@ -151,7 +179,7 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
                 const audioBuffer = await decodeAudioData(
                   decode(base64Audio),
                   ctx,
-                  24000,
+                  24000, // Gemini response is 24kHz
                   1
                 );
                 
@@ -172,7 +200,6 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
             }
             
             if (message.serverContent?.interrupted) {
-                // Stop all currently playing sources
                 sourcesRef.current.forEach(src => {
                     try { src.stop(); } catch(e) {}
                 });
@@ -230,10 +257,8 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
         audioContextRef.current = null;
     }
     
-    // Close Session (Not explicitly possible via API wrapper but we drop reference)
     if (sessionPromiseRef.current) {
         sessionPromiseRef.current.then(session => {
-            // Check if close exists (it might depend on SDK version)
             if (typeof session.close === 'function') {
                 session.close();
             }
@@ -246,7 +271,6 @@ export const useLiveApi = (config: UseLiveApiConfig = {}): UseLiveApiReturn => {
     setVolume(0);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => disconnect();
   }, [disconnect]);

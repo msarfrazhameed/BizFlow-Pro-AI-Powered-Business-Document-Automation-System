@@ -80,12 +80,14 @@ export const DocumentInput: React.FC<DocumentInputProps> = ({ onInputChanged }) 
 
       <div className="min-h-[200px] flex flex-col justify-center">
         {activeTab === 'upload' ? (
-          <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-slate-800/50">
+          <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-slate-800/50 overflow-hidden">
             {fileName ? (
-              <div className="flex items-center justify-center space-x-3 bg-slate-700 p-4 rounded-lg inline-flex">
-                <FileText className="text-blue-400" />
-                <span className="text-slate-200">{fileName}</span>
-                <button onClick={clearFile} className="text-slate-400 hover:text-red-400">
+              <div className="flex items-center justify-center space-x-3 bg-slate-700 p-4 rounded-lg max-w-full">
+                <FileText className="text-blue-400 flex-shrink-0" size={20} />
+                <span className="text-slate-200 truncate max-w-[180px] md:max-w-[240px]" title={fileName}>
+                    {fileName}
+                </span>
+                <button onClick={clearFile} className="text-slate-400 hover:text-red-400 flex-shrink-0">
                   <X size={18} />
                 </button>
               </div>

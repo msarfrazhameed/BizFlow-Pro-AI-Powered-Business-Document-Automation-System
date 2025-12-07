@@ -130,11 +130,37 @@ const runActionAgent = async (classification: Classification, extraction: Extrac
     properties: {
       primary_action: { type: Type.STRING, description: "Primary recommended action (1 sentence)" },
       secondary_actions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "2-3 secondary actions" },
-      draft_email: { type: Type.STRING, description: "Draft email/message if applicable" },
       workflow: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Sequential workflow steps" },
       summary_text: { type: Type.STRING, description: "Short summary for text-to-speech (1-2 sentences)" },
+      generated_actions: {
+        type: Type.ARRAY,
+        description: "List of actionable drafts for the user.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            label: { type: Type.STRING, description: "Button label, e.g., 'Send Email'" },
+            action_type: { type: Type.STRING, enum: ['email', 'sheet', 'slack_message', 'save_pdf'] },
+            enabled: { type: Type.BOOLEAN },
+            tooltip: { type: Type.STRING },
+            content: {
+              type: Type.OBJECT,
+              properties: {
+                to: { type: Type.STRING },
+                subject: { type: Type.STRING },
+                body: { type: Type.STRING },
+                headers: { type: Type.ARRAY, items: { type: Type.STRING } },
+                row: { type: Type.ARRAY, items: { type: Type.STRING } },
+                message: { type: Type.STRING },
+                recipient: { type: Type.STRING },
+                channel: { type: Type.STRING },
+              }
+            }
+          },
+          required: ["label", "action_type", "enabled", "content"]
+        }
+      }
     },
-    required: ["primary_action", "secondary_actions", "workflow", "summary_text"],
+    required: ["primary_action", "secondary_actions", "workflow", "summary_text", "generated_actions"],
   };
 
   const response = await ai.models.generateContent({
@@ -146,17 +172,17 @@ Input: structured fields JSON + classification JSON.
 Tasks:
 1. Recommend primary action (1 sentence).
 2. Recommend secondary actions (2–3 items).
-3. Generate draft email/message (if applicable).
-4. Generate sequential workflow steps.
-5. Optional: summarize in 1–2 sentences for voice output (TTS) if requested.
-Output:
-{
-  "primary_action": "",
-  "secondary_actions": ["",""],
-  "draft_email": "",
-  "workflow": ["step1","step2","step3"],
-  "summary_text": ""  // for TTS
-}
+3. Generate sequential workflow steps.
+4. Summarize in 1–2 sentences for voice output (TTS).
+5. Generate ready-to-execute drafts ONLY IF EXPLICITLY RELEVANT based on the document context.
+   - Email: Generate ONLY if the document implies sending an email (e.g., to a vendor for approval, replying to a complaint). If it is just an informational receipt or internal note, DO NOT generate an email draft.
+   - Slack: Generate ONLY if the team needs to be alerted (e.g., high urgency, new lead).
+   - Sheet: Generate if tabular data is extracted.
+   - Save PDF: Always available.
+   
+   CRITICAL: Do not halluncinate email drafts for documents that don't need them.
+
+Output JSON with "generated_actions" array containing specific drafts.
 
 CLASSIFICATION:
 ${JSON.stringify(classification)}
@@ -179,7 +205,7 @@ ${JSON.stringify(extraction)}`
       primary: data.primary_action,
       secondary: data.secondary_actions,
       workflow: data.workflow,
-      emailDraft: data.draft_email,
+      generatedActions: data.generated_actions || [],
     },
     summary: data.summary_text
   };
@@ -227,11 +253,12 @@ export const analyzeDocument = async (
 
     // Step 4: Action Generation
     onProgress('action');
-    // Note: Action agent receives structured data, not raw text
     const { actions, summary } = await runActionAgent(classification, extraction);
 
     onProgress('complete');
     return {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
       classification,
       extraction,
       actions,
