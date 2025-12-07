@@ -4,6 +4,7 @@ import { DocumentInput } from './components/DocumentInput';
 import { AnalysisView } from './components/AnalysisView';
 import { LiveSession } from './components/LiveSession';
 import { HistoryPanel } from './components/HistoryPanel';
+import { Footer } from './components/Footer';
 import { analyzeDocument } from './services/gemini';
 import { DocumentInput as DocInputType, AnalysisResult, AppMode, AgentStage } from './types';
 
@@ -122,7 +123,7 @@ function App() {
                 <Zap className="text-white h-5 w-5" fill="currentColor" />
               </div>
               <span className="text-xl font-bold text-white tracking-tight">
-                BizFlow<span className="text-blue-400">Pro</span>
+                FrazBiz<span className="text-blue-400">Labs</span>
               </span>
             </div>
             
@@ -168,7 +169,8 @@ function App() {
             <div className="lg:col-span-4 space-y-6">
                 
                 {/* Input Card */}
-                <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden sticky top-24 z-20">
+                {/* REMOVED: sticky top-24 z-20 - to fix scrolling issue */}
+                <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden">
                     <div className="p-4 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between">
                         <h2 className="font-semibold text-white flex items-center text-sm uppercase tracking-wider">
                             <Layout className="mr-2 text-blue-500" size={16} />
@@ -250,6 +252,8 @@ function App() {
 
           </div>
       </main>
+
+      <Footer />
       
       {/* Live Session Modal */}
       {showLiveModal && (

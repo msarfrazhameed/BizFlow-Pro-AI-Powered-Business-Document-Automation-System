@@ -1,5 +1,5 @@
 {
-  "name": "BizFlow Pro",
+  "name": "FrazBizLabs",
   "description": "An AI-powered business workflow agent that analyzes documents and supports real-time voice interaction.",
   "requestFramePermissions": [
     "microphone"
